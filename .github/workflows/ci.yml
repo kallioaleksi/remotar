@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y shellcheck zstd
+      - name: shellcheck
+        run: shellcheck bin/remotar tests/run.sh tests/shim/ssh
+      - name: Tests
+        run: tests/run.sh
