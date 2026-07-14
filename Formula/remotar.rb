@@ -2,7 +2,7 @@ class Remotar < Formula
   desc "Pipe a tar stream over SSH to fetch or push directories"
   homepage "https://github.com/kallioaleksi/remotar"
   url "https://github.com/kallioaleksi/remotar/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000" # replaced after tagging
+  sha256 "b71aabdc0771c8f907cddd3a247700f42e8ff88ec340e8463f3a87b779e1b222"
   license "MIT"
   head "https://github.com/kallioaleksi/remotar.git", branch: "main"
 
