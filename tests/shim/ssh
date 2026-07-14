@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Fake ssh for tests: records the host argument, runs the "remote" command
+# in a local bash so pipelines work end-to-end without a network.
+set -euo pipefail
+echo "$1" >> "${SSH_SHIM_LOG:-/dev/null}"
+shift
+exec bash -c "$*"

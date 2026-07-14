@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# remotar - pipe a tar stream over SSH to fetch or push directories
+#
+# The remote command is intentionally expanded client-side; paths embedded in
+# it are escaped with printf %q.
+# shellcheck disable=SC2029
+set -euo pipefail
+
+VERSION="1.0.0"
+
+usage() {
+  cat <<'EOF'
+Usage: remotar [-z] [-p] SOURCE DEST
+
+Copy a directory between local and remote by piping a tar stream over SSH.
+Exactly one of SOURCE and DEST must be remote, written scp-style as
+[user@]host:/path. The directory itself is copied into DEST (no trailing-slash
+magic): remotar host:/var/logs ./out produces ./out/logs.
+
+  remotar [user@]host:/remote/dir /local/dest    fetch (remote -> local)
+  remotar /local/dir [user@]host:/remote/dest    push  (local -> remote)
+
+Options:
+  -z   compress the stream with zstd (needs zstd on both ends)
+  -p   show progress (needs pv locally)
+  -h, --help      show this help
+  --version       print version
+
+An argument counts as remote if it contains a colon and no slash before it,
+like scp. Write a local path containing a colon with a leading ./ or as an
+absolute path.
+EOF
+}
+
+die() {
+  echo "remotar: $*" >&2
+  exit 1
+}
+
+usage_error() {
+  echo "remotar: $*" >&2
+  echo "Try 'remotar --help' for more information." >&2
+  exit 2
+}
+
+# Quote a string for safe embedding in the remote shell command.
+q() { printf '%q' "$1"; }
+
+is_remote() { [[ $1 == *:* && ${1%%:*} != */* ]]; }
+
+for arg in "$@"; do
+  case $arg in
+    --help) usage; exit 0 ;;
+    --version) echo "remotar $VERSION"; exit 0 ;;
+  esac
+done
+
+compress=false
+progress=false
+while getopts ":zph" opt; do
+  case $opt in
+    z) compress=true ;;
+    p) progress=true ;;
+    h) usage; exit 0 ;;
+    *) usage_error "unknown option: -$OPTARG" ;;
+  esac
+done
+shift $((OPTIND - 1))
+[ $# -eq 2 ] || usage_error "expected SOURCE and DEST, got $# argument(s)"
+
+src="$1"
+dest="$2"
+
+if $compress; then
+  command -v zstd >/dev/null 2>&1 || die "-z requires zstd (brew install zstd)"
+fi
+if $progress; then
+  command -v pv >/dev/null 2>&1 || die "-p requires pv (brew install pv)"
+fi
+
+pv_or_cat() {
+  if $progress; then pv; else cat; fi
+}
+
+if is_remote "$src" && ! is_remote "$dest"; then
+  # fetch: remote -> local
+  host="${src%%:*}"
+  rpath="${src#*:}"
+  [ -n "$rpath" ] || usage_error "empty remote path in '$src'"
+  parent="$(dirname "$rpath")"
+  name="$(basename "$rpath")"
+  mkdir -p -- "$dest"
+  remote="tar cf - -C $(q "$parent") $(q "$name")"
+  if $compress; then
+    remote="set -o pipefail 2>/dev/null || true; $remote | zstd -q -T0"
+    ssh "$host" "$remote" | pv_or_cat | zstd -q -d | tar xf - -C "$dest"
+  else
+    ssh "$host" "$remote" | pv_or_cat | tar xf - -C "$dest"
+  fi
+elif is_remote "$dest" && ! is_remote "$src"; then
+  # push: local -> remote
+  host="${dest%%:*}"
+  rpath="${dest#*:}"
+  [ -n "$rpath" ] || usage_error "empty remote path in '$dest'"
+  [ -e "$src" ] || die "no such file or directory: $src"
+  parent="$(dirname "$src")"
+  name="$(basename "$src")"
+  if $compress; then
+    remote="mkdir -p -- $(q "$rpath") && zstd -q -d | tar xf - -C $(q "$rpath")"
+    tar cf - -C "$parent" "$name" | zstd -q -T0 | pv_or_cat | ssh "$host" "$remote"
+  else
+    remote="mkdir -p -- $(q "$rpath") && tar xf - -C $(q "$rpath")"
+    tar cf - -C "$parent" "$name" | pv_or_cat | ssh "$host" "$remote"
+  fi
+else
+  usage_error "exactly one of SOURCE and DEST must be remote ([user@]host:/path)"
+fi
