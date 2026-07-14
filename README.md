@@ -5,15 +5,16 @@ stream over SSH — no temp files, no rsync required on the other end.
 
 ```sh
 # fetch: remote -> local
-remotar user@host:/var/logs ./out          # -> ./out/logs
+remotar user@host:/var/logs ./logs-copy    # ./logs-copy becomes a copy of /var/logs
 
 # push: local -> remote
-remotar ./logs user@host:/var/backup       # -> /var/backup/logs
+remotar ./logs user@host:/var/backup/logs  # remote /var/backup/logs becomes a copy of ./logs
 ```
 
 Direction is inferred scp-style: exactly one argument must look like
-`[user@]host:/path`. The directory itself is copied into the destination —
-there is no rsync trailing-slash magic.
+`[user@]host:/path`. DEST becomes a copy of the SOURCE directory — its
+contents land directly in DEST, which is created if missing (like
+`rsync src/ dest/`, no trailing slash needed).
 
 ## Install
 

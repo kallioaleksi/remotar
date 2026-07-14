@@ -35,7 +35,7 @@ for flags in "" "-z"; do
   make_fixture "$src/payload"
   # shellcheck disable=SC2086
   if "$remotar" $flags "testhost:$src/payload" "$dest" \
-      && diff -r "$src/payload" "$dest/payload" >/dev/null; then
+      && diff -r "$src/payload" "$dest" >/dev/null; then
     pass "$label"
   else
     fail "$label"
@@ -51,7 +51,7 @@ for flags in "" "-z"; do
   make_fixture "$src/payload"
   # shellcheck disable=SC2086
   if "$remotar" $flags "$src/payload" "testhost:$dest" \
-      && diff -r "$src/payload" "$dest/payload" >/dev/null; then
+      && diff -r "$src/payload" "$dest" >/dev/null; then
     pass "$label"
   else
     fail "$label"
@@ -97,8 +97,12 @@ expect_exit "./a:b treated as local" 1 "$remotar" "$work/colon/a:b" "host:/tmp/x
 # push of nonexistent local source -> clean error, exit 1
 expect_exit "push missing source -> exit 1" 1 "$remotar" "$work/nope" "host:/tmp/x"
 
+# push of a file (not a directory) -> clean error, exit 1
+echo x > "$work/afile"
+expect_exit "push file source -> exit 1" 1 "$remotar" "$work/afile" "host:/tmp/x"
+
 # --version content
-if [ "$("$remotar" --version)" = "remotar 1.0.0" ]; then
+if [ "$("$remotar" --version)" = "remotar 2.0.0" ]; then
   pass "--version output"
 else
   fail "--version output"

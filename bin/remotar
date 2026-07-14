@@ -6,7 +6,7 @@
 # shellcheck disable=SC2029
 set -euo pipefail
 
-VERSION="1.0.0"
+VERSION="2.0.0"
 
 usage() {
   cat <<'EOF'
@@ -14,8 +14,9 @@ Usage: remotar [-z] [-p] SOURCE DEST
 
 Copy a directory between local and remote by piping a tar stream over SSH.
 Exactly one of SOURCE and DEST must be remote, written scp-style as
-[user@]host:/path. The directory itself is copied into DEST (no trailing-slash
-magic): remotar host:/var/logs ./out produces ./out/logs.
+[user@]host:/path. DEST becomes a copy of the SOURCE directory (its contents
+land directly in DEST, which is created if missing): remotar host:/var/logs
+./out puts the contents of /var/logs straight into ./out.
 
   remotar [user@]host:/remote/dir /local/dest    fetch (remote -> local)
   remotar /local/dir [user@]host:/remote/dest    push  (local -> remote)
@@ -87,10 +88,8 @@ if is_remote "$src" && ! is_remote "$dest"; then
   host="${src%%:*}"
   rpath="${src#*:}"
   [ -n "$rpath" ] || usage_error "empty remote path in '$src'"
-  parent="$(dirname "$rpath")"
-  name="$(basename "$rpath")"
   mkdir -p -- "$dest"
-  remote="tar cf - -C $(q "$parent") $(q "$name")"
+  remote="tar cf - -C $(q "$rpath") ."
   if $compress; then
     remote="set -o pipefail 2>/dev/null || true; $remote | zstd -q -T0"
     ssh "$host" "$remote" | pv_or_cat | zstd -q -d | tar xf - -C "$dest"
@@ -102,15 +101,13 @@ elif is_remote "$dest" && ! is_remote "$src"; then
   host="${dest%%:*}"
   rpath="${dest#*:}"
   [ -n "$rpath" ] || usage_error "empty remote path in '$dest'"
-  [ -e "$src" ] || die "no such file or directory: $src"
-  parent="$(dirname "$src")"
-  name="$(basename "$src")"
+  [ -d "$src" ] || die "no such directory: $src"
   if $compress; then
     remote="mkdir -p -- $(q "$rpath") && zstd -q -d | tar xf - -C $(q "$rpath")"
-    tar cf - -C "$parent" "$name" | zstd -q -T0 | pv_or_cat | ssh "$host" "$remote"
+    tar cf - -C "$src" . | zstd -q -T0 | pv_or_cat | ssh "$host" "$remote"
   else
     remote="mkdir -p -- $(q "$rpath") && tar xf - -C $(q "$rpath")"
-    tar cf - -C "$parent" "$name" | pv_or_cat | ssh "$host" "$remote"
+    tar cf - -C "$src" . | pv_or_cat | ssh "$host" "$remote"
   fi
 else
   usage_error "exactly one of SOURCE and DEST must be remote ([user@]host:/path)"
