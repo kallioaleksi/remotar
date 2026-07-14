@@ -19,6 +19,7 @@ there is no rsync trailing-slash magic.
 
 ```sh
 brew tap kallioaleksi/remotar https://github.com/kallioaleksi/remotar
+brew trust kallioaleksi/remotar   # Homebrew >= 6 requires trusting third-party taps
 brew install remotar
 ```
 
